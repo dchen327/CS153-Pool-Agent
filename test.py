@@ -4,6 +4,12 @@ import cv2
 import numpy as np
 import subprocess
 from time import sleep
+from pathlib import Path
+
+root = Path(__file__).parent
+# Create screenshots directory if it doesn't exist
+screenshot_dir = root / 'screenshots'
+screenshot_dir.mkdir(exist_ok=True)
 
 # Activate the window
 try:
@@ -12,7 +18,8 @@ try:
 except:
     print("Window not found or couldn't be activated")
     # run scrcpy --no-audio --window-title=8Ball
-    subprocess.run(['scrcpy', '--no-audio', '--fullscreen', '--window-title=8Ball'], check=True)
+    process = subprocess.Popen(['scrcpy', '--no-audio', '--fullscreen', '--window-title=8Ball'])
+    sleep(4)  # Give scrcpy some time to open the window
     window = pgw.getWindowsWithTitle('8Ball')[0]
     window.activate()
 
@@ -37,7 +44,9 @@ with mss.mss() as sct:
         # Convert to CV2 format
         img_cv2 = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2BGR)
         
-        # Write to file
-        cv2.imwrite(f'screenshot_{i}.png', img_cv2)
+        # Write to file, save in screenshots folder
+        screenshot_path = screenshot_dir / f'screenshot_{i}.png'
+        cv2.imwrite(str(screenshot_path), img_cv2)
+        print(f"Screenshot {i} taken")
         sleep(3)
 
