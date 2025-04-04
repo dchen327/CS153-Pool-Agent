@@ -3,9 +3,11 @@ import mss
 import cv2
 import numpy as np
 import subprocess
+import pyautogui as pag
+import keyboard
 from time import sleep
 from pathlib import Path
-import pyautogui as pag
+
 
 POWER_STICK_TOP = (112, 603)
 POWER_STICK_BOTTOM = (112, 1200)
@@ -36,6 +38,17 @@ def setup():
             print("Failed to find or activate the '8Ball' window after 10 attempts")
 
 def collect_data():
+    print("Spacebar to take screenshots. Press 'q' to quit.")
+    # screenshot_count = highest number in folder + 1
+    screenshot_count = 0
+    for file in screenshot_dir.glob('screenshot_*.png'):
+        try:
+            num = int(file.stem.split('_')[1])
+            if num >= screenshot_count:
+                screenshot_count = num + 1
+        except ValueError:
+            pass
+    print(f"Starting from screenshot number: {screenshot_count}")
     with mss.mss() as sct:
         target_monitor = sct.monitors[1]  # Primary monitor
         
@@ -46,17 +59,22 @@ def collect_data():
             "width": target_monitor["width"], 
             "height": target_monitor["height"]
         }
-        
-        # every 3s for 10 times
-        for i in range(10):
-            sct_img = sct.grab(monitor)
-            img_cv2 = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2BGR)
+
+        while True:
+            key = keyboard.read_key()  # this blocks
             
-            # write to file, save in screenshots folder
-            screenshot_path = screenshot_dir / f'screenshot_{i}.png'
-            cv2.imwrite(str(screenshot_path), img_cv2)
-            print(f"Screenshot {i} taken")
-            sleep(3)
+            if key == 'space':
+                sct_img = sct.grab(monitor)
+                img_cv2 = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2BGR)
+                
+                # write to file, save in screenshots folder
+                screenshot_path = screenshot_dir / f'screenshot_{screenshot_count}.png'
+                cv2.imwrite(str(screenshot_path), img_cv2)
+                print(f"Screenshot {screenshot_count} taken")
+                screenshot_count += 1
+            elif key == 'q':
+                print('Quitting...')
+                break
 
 def shoot_ball(coords, power=100):
     ''' Given (x, y) coordinates and power, click to aim and shoot the ball'''
@@ -77,8 +95,14 @@ def shoot_ball(coords, power=100):
 # or just check the outline on the profile pic
 # or check for motion? if not motion in game area, maybe is my turn to shoot
 
-coords = (1500, 775)
-for _ in range(1):
-    shot_coords = (coords[0] + np.random.randint(-50, 50), coords[1] + np.random.randint(-50, 50))
-    shoot_ball(shot_coords, power=50)
-    sleep(3)
+def test_shoot():
+    coords = (1500, 775)
+    for _ in range(1):
+        shot_coords = (coords[0] + np.random.randint(-50, 50), coords[1] + np.random.randint(-50, 50))
+        shoot_ball(shot_coords, power=50)
+        sleep(3)
+    
+
+if __name__ == "__main__":
+    setup()
+    collect_data()
