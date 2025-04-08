@@ -11,7 +11,7 @@ def compute_ratios(img, use_blue=False):
     G = img[:, :, 1]
     B = img[:, :, 2]
     if use_blue:
-        B[B == 0] = 1
+        B[B == 0] = 1e-6
         return R/B, G/B
     G[G == 0] = 1  # avoid division by zero
     return R/G, B/G
@@ -27,7 +27,7 @@ def compute_background_thresholds(ratios, k):
     mu, std = norm.fit(flat)
     return mu - k * std, mu + k * std, mu, std
 
-def create_foreground_mask(ratio_1, ratio_2, thresh_1, thresh_2):
+def create_foreground_mask(img, ratio_1, ratio_2, thresh_1, thresh_2):
     """
     Create a foreground mask including all pixels not within an acceptable range of background
     r/g and b/g values.
@@ -38,6 +38,8 @@ def create_foreground_mask(ratio_1, ratio_2, thresh_1, thresh_2):
     mask_1 = (ratio_1 >= thresh_1[0]) & (ratio_1 <= thresh_1[1])
     mask_2 = (ratio_2 >= thresh_2[0]) & (ratio_2 <= thresh_2[1])
     background_mask = mask_1 & mask_2
+    # keep black pixels (avg < 10), this is to avoid deleting the 8 ball
+    background_mask = background_mask & (img.mean(axis=2) > 10)
     return (~background_mask * 255).astype(np.uint8)
 
 def find_circles(mask, min_dist, canny, accum, min_radius, max_radius):
@@ -73,13 +75,14 @@ def generate_data(img, use_blue=False, k_1 = 1.2, k_2 = 1.5, min_dist=40, canny=
     bg_thresh = compute_background_thresholds(bg, k=k_2)
 
     # Create mask and find circles
-    mask = create_foreground_mask(rg, bg, rg_thresh, bg_thresh)
+    mask = create_foreground_mask(img, rg, bg, rg_thresh, bg_thresh)
     circles = find_circles(mask, min_dist, canny, accum, min_radius, max_radius)
 
     data = []
     circles = np.around(circles).astype(np.uint16)
     if circles is not None:
         for (x, y, r) in circles[0, :]:
+            r = 28
             if r <= x <= w-1-r and r <= y <= h-1-r:
                 cropped = img[y-r:y+r, x-r:x+r].copy()
                 data.append(cropped)
