@@ -76,17 +76,18 @@ def generate_data(img, use_blue=False, k_1 = 1.2, k_2 = 1.5, min_dist=40, canny=
 
     # Create mask and find circles
     mask = create_foreground_mask(img, rg, bg, rg_thresh, bg_thresh)
+
     circles = find_circles(mask, min_dist, canny, accum, min_radius, max_radius)
 
     data = []
     circles = np.around(circles).astype(np.uint16)
     if circles is not None:
-        for (x, y, r) in circles[0, :]:
+        for (x, y, _) in circles[0, :]:
             r = 28
             if r <= x <= w-1-r and r <= y <= h-1-r:
                 cropped = img[y-r:y+r, x-r:x+r].copy()
                 data.append(cropped)
-    return data
+    return circles, data
 
 def preprocess_image(img, size=48, padding=0, thresh_1=(0.9,1.25), thresh_2=(0.65,1), close_size=3, open_size=3):
     """
