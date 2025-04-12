@@ -37,6 +37,7 @@ def setup():
             sleep(1)
         else:
             print("Failed to find or activate the '8Ball' window after 10 attempts")
+            quit()
 
 def get_highest_screenshot_num():
     ''' Get the highest screenshot number in the screenshots directory '''
@@ -109,7 +110,7 @@ def take_screenshots_from_break():
     ''' Repeatedly create new games, break, and take a screenshot when balls stop moving '''
     screenshot_count = get_highest_screenshot_num()
     print(f"Starting from screenshot number: {screenshot_count}")
-    for _ in range(5):
+    for _ in range(10):
         # start new game
         # if there are any ads open, close them by searching for the x button
         try:
