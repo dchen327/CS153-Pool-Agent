@@ -207,9 +207,18 @@ def show_image_and_click_to_choose(img, circles):
 
     return chosen_ball
 
+def conv_coord_from_cropped_to_full(coord):
+    ''' Convert coordinates from cropped image to full image '''
+    # add 15 px to x and y coords
+    coord = (coord[0] + constants['playable_area']['top_left'][0] + 15, coord[1] + constants['playable_area']['top_left'][1] + 15)
+    return coord
+
 
 def manually_pick_ball_to_shoot():
     print("Spacebar to take screenshots and get list of balls. Press 'q' to quit.")
+
+    pocket_aim_coords = constants['pocket_aim_coords']  # 6 (x, y) of places to aim
+
     with mss.mss() as sct:
         # set monitor to be the one with the 8Ball window
         monitor = sct.monitors[1]  # Primary monitor
@@ -230,7 +239,20 @@ def manually_pick_ball_to_shoot():
                 
                 chosen_ball = show_image_and_click_to_choose(img, circles)
                 sleep(0.5)
-                shoot_ball((chosen_ball[0] + constants['playable_area']['top_left'][0] + 15, chosen_ball[1] + constants['playable_area']['top_left'][1] + 15), power=random.randint(85, 100))
+
+                # find nearest pocket aim coord
+                if chosen_ball is not None:
+                    chosen_ball = conv_coord_from_cropped_to_full(chosen_ball)
+                    distances = [np.linalg.norm(np.array(pocket_aim_coords[i]) - np.array(chosen_ball[:2])) for i in range(6)]
+                    closest_pocket_idx = np.argmin(distances)
+                    chosen_pocket = pocket_aim_coords[closest_pocket_idx]
+                    # take line from pocket to ball, extend by 25 px, and aim there
+                    line_vector = np.array(chosen_ball[:2]) + np.array(chosen_pocket)
+                    line_vector = line_vector / np.linalg.norm(line_vector) * 25
+                    aim_coords = np.array(chosen_ball[:2]) - line_vector
+                    aim_coords = (int(aim_coords[0]), int(aim_coords[1]))
+
+                    shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(85, 100))
 
 
             elif key == 'q':
