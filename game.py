@@ -8,9 +8,9 @@ import keyboard
 import random
 import json
 import project
+import matplotlib.pyplot as plt
 from time import sleep
 from pathlib import Path
-
 
 
 POWER_STICK_TOP = (112, 615)
@@ -166,7 +166,48 @@ def take_screenshots_from_break():
         pag.moveTo(1000, 1050)  # Move mouse to the position
         pag.click()
         sleep(3)
-    
+
+def show_image_and_click_to_choose(img, circles):
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    # Maximize the window
+    manager = plt.get_current_fig_manager()
+    try:
+        manager.window.state('zoomed')  # For TkAgg on Windows
+    except AttributeError:
+        try:
+            manager.full_screen_toggle()  # For QtAgg or Mac/Linux
+        except Exception as e:
+            print("Fullscreen not supported:", e)
+
+    ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+
+    for idx, (x, y, r) in enumerate(circles):
+        ax.add_patch(plt.Circle((x, y), r, color='lime', fill=False, linewidth=2))
+        ax.text(x - 15, y + 15, str(idx + 1), color='white', fontsize=12, weight='bold')
+
+    plt.title("Click a ball to choose")
+    plt.axis('off')
+
+    chosen_ball = None
+
+    def onclick(event):
+        nonlocal chosen_ball
+        if event.xdata is None or event.ydata is None:
+            return
+        click_point = np.array([event.xdata, event.ydata])
+        distances = [np.linalg.norm(click_point - np.array([x, y])) for (x, y, r) in circles]
+        closest_idx = np.argmin(distances)
+        chosen_ball = circles[closest_idx]
+        print(f"Chosen ball #{closest_idx + 1}: {chosen_ball}")
+        plt.close(fig)
+
+    fig.canvas.mpl_connect('button_press_event', onclick)
+    plt.show()  # Blocks until the window is closed
+
+    return chosen_ball
+
+
 def manually_pick_ball_to_shoot():
     print("Spacebar to take screenshots and get list of balls. Press 'q' to quit.")
     with mss.mss() as sct:
@@ -186,32 +227,9 @@ def manually_pick_ball_to_shoot():
                 circles, data = project.generate_data(img, use_blue=False, k_1=2.5, k_2=1.5,
                                             min_dist=20, canny=100, accum=18, min_radius=23, max_radius=27)
                 circles = circles[0]
-
-                for idx, ball in enumerate(circles):
-                    x, y, r = ball
-                    # draw circle on image
-                    cv2.circle(img, (x, y), r, (0, 255, 0), 2)
-                    # label each circle with a number
-                    cv2.putText(img, str(idx + 1), (x - 15, y + 15),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-                # show image
-                cv2.namedWindow('Choose a ball by number', cv2.WINDOW_NORMAL)
-                cv2.imshow('Choose a ball by number', img)
-                cv2.waitKey(1)
-
-                while True:
-                    try:
-                        choice = int(input(f"Pick a ball (1 to {len(circles)}): "))
-                        if 1 <= choice <= len(circles):
-                            chosen_ball = circles[choice - 1]
-                            print(f"Chosen ball: {chosen_ball}")
-                            break
-                        else:
-                            print("Invalid choice. Try again.")
-                    except ValueError:
-                        print("Please enter a valid number.")
-
-                cv2.destroyAllWindows()
+                
+                chosen_ball = show_image_and_click_to_choose(img, circles)
+                sleep(0.5)
                 shoot_ball((chosen_ball[0] + constants['playable_area']['top_left'][0] + 15, chosen_ball[1] + constants['playable_area']['top_left'][1] + 15), power=random.randint(85, 100))
 
 
