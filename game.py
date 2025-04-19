@@ -86,18 +86,18 @@ def shoot_ball(coords, power=100):
     pag.moveTo(coords[0], coords[1])
     pag.click()
     sleep(0.5)  # Wait for the aim to settle
-    # # drag power stick down to shoot
-    # pag.moveTo(POWER_STICK_TOP[0], POWER_STICK_TOP[1])
-    # pag.mouseDown()
-    # sleep(0.2)
-    # # calculate the drag distance based on power
-    # drag_distance = int((POWER_STICK_BOTTOM[1] - POWER_STICK_TOP[1]) * (power / 100))
-    # # drag down to shoot
-    # pag.moveTo(POWER_STICK_BOTTOM[0], POWER_STICK_TOP[1] + drag_distance, duration=0.5)
-    # sleep(0.2)
-    # pag.mouseUp()
-    # # wait for the shot to complete
-    # sleep(0.5)
+    # drag power stick down to shoot
+    pag.moveTo(POWER_STICK_TOP[0], POWER_STICK_TOP[1])
+    pag.mouseDown()
+    sleep(0.2)
+    # calculate the drag distance based on power
+    drag_distance = int((POWER_STICK_BOTTOM[1] - POWER_STICK_TOP[1]) * (power / 100))
+    # drag down to shoot
+    pag.moveTo(POWER_STICK_BOTTOM[0], POWER_STICK_TOP[1] + drag_distance, duration=0.5)
+    sleep(0.2)
+    pag.mouseUp()
+    # wait for the shot to complete
+    sleep(0.5)
 
 # TODO: figure out how to determine if it's my turn to shoot (maybe amt of green in time bar is changing?)
 # or just check the outline on the profile pic
@@ -240,16 +240,18 @@ def manually_pick_ball_to_shoot():
                 chosen_ball = show_image_and_click_to_choose(img, circles)
                 sleep(0.5)
 
-                # find nearest pocket aim coord
+                # # find nearest pocket aim coord
                 if chosen_ball is not None:
                     chosen_ball = conv_coord_from_cropped_to_full(chosen_ball)
                     distances = [np.linalg.norm(np.array(pocket_aim_coords[i]) - np.array(chosen_ball[:2])) for i in range(6)]
                     closest_pocket_idx = np.argmin(distances)
                     chosen_pocket = pocket_aim_coords[closest_pocket_idx]
-                    # take line from pocket to ball, extend by 25 px, and aim there
-                    line_vector = np.array(chosen_ball[:2]) + np.array(chosen_pocket)
-                    line_vector = line_vector / np.linalg.norm(line_vector) * 25
-                    aim_coords = np.array(chosen_ball[:2]) - line_vector
+
+                    # take line from pocket to ball, extend by 50 px, and aim there
+                    # 50px for 2 ball radius (center to center)
+                    line_vector = np.array(chosen_ball[:2]) - np.array(chosen_pocket)
+                    line_vector = line_vector / np.linalg.norm(line_vector) * 50
+                    aim_coords = np.array(chosen_ball[:2]) + line_vector
                     aim_coords = (int(aim_coords[0]), int(aim_coords[1]))
 
                     shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(85, 100))
