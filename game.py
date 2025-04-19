@@ -182,9 +182,14 @@ def show_image_and_click_to_choose(img, circles):
 
     ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
+    cue_ball = find_cue_ball(img, circles)
+
     for idx, (x, y, r) in enumerate(circles):
-        ax.add_patch(plt.Circle((x, y), r, color='lime', fill=False, linewidth=2))
-        ax.text(x - 15, y + 15, str(idx + 1), color='white', fontsize=12, weight='bold')
+        if (x, y) == cue_ball:
+            ax.add_patch(plt.Circle((x, y), r, color='red', fill=False, linewidth=2))
+        else:
+            ax.add_patch(plt.Circle((x, y), r, color='lime', fill=False, linewidth=2))
+            ax.text(x - 15, y + 15, str(idx + 1), color='white', fontsize=12, weight='bold')
 
     plt.title("Click a ball to choose")
     plt.axis('off')
@@ -213,6 +218,38 @@ def conv_coord_from_cropped_to_full(coord):
     coord = (coord[0] + constants['playable_area']['top_left'][0] + 15, coord[1] + constants['playable_area']['top_left'][1] + 15)
     return coord
 
+def find_cue_ball(img, circles):
+    ''' given image and circle coords, find circle with highest avg RGB (cue ball) '''
+    cue_ball = None
+    cue_ball_rgb = 0
+    radius = constants['ball_radius']
+
+    for circle in circles:
+        x, y, _ = circle
+        
+        # extract square region around the ball
+        crop = img[y - radius:y + radius, x - radius:x + radius]
+
+        # create circular mask
+        yy, xx = np.ogrid[:2 * radius, :2 * radius]
+        mask = (xx - radius) ** 2 + (yy - radius) ** 2 <= radius ** 2
+
+        # apply mask to crop
+        masked_pixels = crop[mask]
+
+        # calculate average RGB
+        avg_rgb = np.mean(masked_pixels, axis=0)
+
+        # use brightness (sum of R+G+B) or any channel (e.g., R) to find cue
+        brightness = np.sum(avg_rgb)
+        if brightness > cue_ball_rgb:
+            cue_ball_rgb = brightness
+            cue_ball = tuple(circle[:2])
+
+    return cue_ball
+
+
+
 
 def manually_pick_ball_to_shoot():
     print("Spacebar to take screenshots and get list of balls. Press 'q' to quit.")
@@ -236,6 +273,8 @@ def manually_pick_ball_to_shoot():
                 circles, data = project.generate_data(img, use_blue=False, k_1=2.5, k_2=1.5,
                                             min_dist=20, canny=100, accum=18, min_radius=23, max_radius=27)
                 circles = circles[0]
+
+                # cue_ball = find_cue_ball(img, circles)
                 
                 chosen_ball = show_image_and_click_to_choose(img, circles)
                 sleep(0.5)
@@ -247,10 +286,10 @@ def manually_pick_ball_to_shoot():
                     closest_pocket_idx = np.argmin(distances)
                     chosen_pocket = pocket_aim_coords[closest_pocket_idx]
 
-                    # take line from pocket to ball, extend by 50 px, and aim there
+                    # take line from pocket to ball, extend by 2*ball radius px, and aim there
                     # 50px for 2 ball radius (center to center)
                     line_vector = np.array(chosen_ball[:2]) - np.array(chosen_pocket)
-                    line_vector = line_vector / np.linalg.norm(line_vector) * 50
+                    line_vector = line_vector / np.linalg.norm(line_vector) * 2 * constants['ball_radius']
                     aim_coords = np.array(chosen_ball[:2]) + line_vector
                     aim_coords = (int(aim_coords[0]), int(aim_coords[1]))
 
