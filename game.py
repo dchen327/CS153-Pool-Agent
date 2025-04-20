@@ -204,7 +204,6 @@ def show_image_and_click_to_choose(img, circles):
         distances = [np.linalg.norm(click_point - np.array([x, y])) for (x, y, r) in circles]
         closest_idx = np.argmin(distances)
         chosen_ball = circles[closest_idx]
-        print(f"Chosen ball #{closest_idx + 1}: {chosen_ball}")
         plt.close(fig)
 
     fig.canvas.mpl_connect('button_press_event', onclick)
@@ -216,40 +215,95 @@ def conv_coord_from_cropped_to_full(coord):
     ''' Convert coordinates from cropped image to full image '''
     # add 15 px to x and y coords
     coord = (coord[0] + constants['playable_area']['top_left'][0] + 15, coord[1] + constants['playable_area']['top_left'][1] + 15)
-    return coord
+    return np.array(coord)
 
 def find_cue_ball(img, circles):
-    ''' given image and circle coords, find circle with highest avg RGB (cue ball) '''
+    ''' Given image and circle coords, find circle with highest avg RGB (cue ball) '''
     cue_ball = None
     cue_ball_rgb = 0
     radius = constants['ball_radius']
 
+    h, w = img.shape[:2]
+
     for circle in circles:
         x, y, _ = circle
-        
-        # extract square region around the ball
-        crop = img[y - radius:y + radius, x - radius:x + radius]
+        x, y = int(x), int(y)
 
-        # create circular mask
-        yy, xx = np.ogrid[:2 * radius, :2 * radius]
-        mask = (xx - radius) ** 2 + (yy - radius) ** 2 <= radius ** 2
+        # Define bounding box limits and clamp to image bounds
+        x1 = max(0, x - radius)
+        y1 = max(0, y - radius)
+        x2 = min(w, x + radius)
+        y2 = min(h, y + radius)
 
-        # apply mask to crop
+        crop = img[y1:y2, x1:x2]
+
+        # New radius for the mask if crop size is smaller near edges
+        crop_h, crop_w = crop.shape[:2]
+        yy, xx = np.ogrid[:crop_h, :crop_w]
+        center_y = crop_h // 2
+        center_x = crop_w // 2
+        mask = (xx - center_x) ** 2 + (yy - center_y) ** 2 <= radius ** 2
+
+        if crop.size == 0 or mask.shape != crop.shape[:2]:
+            continue
+
         masked_pixels = crop[mask]
-
-        # calculate average RGB
         avg_rgb = np.mean(masked_pixels, axis=0)
-
-        # use brightness (sum of R+G+B) or any channel (e.g., R) to find cue
         brightness = np.sum(avg_rgb)
+
         if brightness > cue_ball_rgb:
             cue_ball_rgb = brightness
-            cue_ball = tuple(circle[:2])
+            cue_ball = (x, y)
 
     return cue_ball
 
+def get_ghost_ball_coords(chosen_ball, pocket):
+    """ Calculate the ghost ball coordinates for aiming. """
+    chosen_ball, pocket = np.array(chosen_ball), np.array(pocket)
+    pocket_to_ball = chosen_ball - pocket
+    pocket_to_ball = pocket_to_ball / np.linalg.norm(pocket_to_ball) * 2 * constants['ball_radius']
+    ghost_coords = chosen_ball + pocket_to_ball
+    return np.array(ghost_coords, dtype=int)
 
 
+def is_shot_possible(cue_ball, chosen_ball, ghost_coords, pocket):
+    ''' 
+    Given cue ball, chosen ball, and pocket, check if the shot is possible
+    - check angle between cue ball, chosen ball, and pocket
+    - check for interfering balls in both lines (cue to ball and ball to pocket)
+    '''
+    # calculate angle between cue ball, chosen ball, and pocket
+    cue_ball, chosen_ball, pocket = np.array(cue_ball), np.array(chosen_ball), np.array(pocket)
+    ball_to_cue = cue_ball - ghost_coords
+    ball_to_pocket = pocket - chosen_ball
+    print(ball_to_cue, ball_to_pocket)
+    angle = np.arccos(np.dot(ball_to_cue, ball_to_pocket) / (np.linalg.norm(ball_to_cue) * np.linalg.norm(ball_to_pocket)))
+    angle = np.degrees(angle)
+    print(cue_ball, chosen_ball, pocket, angle)
+    if angle < 100:
+        return False
+    return True
+
+def pick_pocket(chosen_ball, cue_ball):
+    ''' 
+    Given chosen ball and cue ball, find the best pocket to aim for 
+    ideas:
+    - make sure angle is > 90 degrees (must be possible shot)
+    - prioritize corner pockets
+    - check to see if there are interfering balls in both lines (cue to ball and ball to pocket)
+    '''
+    valid_pockets = []  # store (pocket_idx, ghost_coords, total ball travel distance)
+    for pocket_idx in range(6):
+        pocket = constants['pocket_aim_coords'][pocket_idx]
+        ghost_coords = get_ghost_ball_coords(chosen_ball, pocket)
+        possible = is_shot_possible(cue_ball, chosen_ball, ghost_coords, pocket)
+        print(f"Pocket {pocket_idx}: {pocket}, Ball coords: {chosen_ball}, Ghost coords: {ghost_coords}, Possible: {possible}")
+        if possible:
+            travel_distance = np.linalg.norm(chosen_ball - pocket) + np.linalg.norm(cue_ball - ghost_coords)
+            valid_pockets.append((pocket_idx, ghost_coords, travel_distance))
+    
+    return min(valid_pockets, key=lambda x: x[2]) if valid_pockets else None
+        
 
 def manually_pick_ball_to_shoot():
     print("Spacebar to take screenshots and get list of balls. Press 'q' to quit.")
@@ -274,26 +328,23 @@ def manually_pick_ball_to_shoot():
                                             min_dist=20, canny=100, accum=18, min_radius=23, max_radius=27)
                 circles = circles[0]
 
-                # cue_ball = find_cue_ball(img, circles)
+                cue_ball = find_cue_ball(img, circles)
+                cue_ball = conv_coord_from_cropped_to_full(cue_ball)
                 
                 chosen_ball = show_image_and_click_to_choose(img, circles)
+                if chosen_ball is None:
+                    print("No ball chosen, skipping...")
+                    continue
+                chosen_ball = conv_coord_from_cropped_to_full(chosen_ball)
                 sleep(0.5)
 
-                # # find nearest pocket aim coord
-                if chosen_ball is not None:
-                    chosen_ball = conv_coord_from_cropped_to_full(chosen_ball)
-                    distances = [np.linalg.norm(np.array(pocket_aim_coords[i]) - np.array(chosen_ball[:2])) for i in range(6)]
-                    closest_pocket_idx = np.argmin(distances)
-                    chosen_pocket = pocket_aim_coords[closest_pocket_idx]
+                _, aim_coords, _ = pick_pocket(chosen_ball, cue_ball)
+                if aim_coords is None:
+                    print("No valid pocket found, skipping...")
+                    continue
+                print(aim_coords)
 
-                    # take line from pocket to ball, extend by 2*ball radius px, and aim there
-                    # 50px for 2 ball radius (center to center)
-                    line_vector = np.array(chosen_ball[:2]) - np.array(chosen_pocket)
-                    line_vector = line_vector / np.linalg.norm(line_vector) * 2 * constants['ball_radius']
-                    aim_coords = np.array(chosen_ball[:2]) + line_vector
-                    aim_coords = (int(aim_coords[0]), int(aim_coords[1]))
-
-                    shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(85, 100))
+                # shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(85, 100))
 
 
             elif key == 'q':
