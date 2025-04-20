@@ -272,16 +272,28 @@ def is_shot_possible(cue_ball, chosen_ball, ghost_coords, pocket):
     - check angle between cue ball, chosen ball, and pocket
     - check for interfering balls in both lines (cue to ball and ball to pocket)
     '''
-    # calculate angle between cue ball, chosen ball, and pocket
+    # calculate angle between cue ball, chosen ball, and pocket, ensure >= 100 deg
     cue_ball, chosen_ball, pocket = np.array(cue_ball), np.array(chosen_ball), np.array(pocket)
     ball_to_cue = cue_ball - ghost_coords
     ball_to_pocket = pocket - chosen_ball
-    print(ball_to_cue, ball_to_pocket)
     angle = np.arccos(np.dot(ball_to_cue, ball_to_pocket) / (np.linalg.norm(ball_to_cue) * np.linalg.norm(ball_to_pocket)))
     angle = np.degrees(angle)
-    print(cue_ball, chosen_ball, pocket, angle)
     if angle < 100:
         return False
+
+    # for middle pocket, check if the angle is too flat
+    MIDDLE_POCKET_X = 1228
+    MIN_STEEP_ANGLE = 30  # degrees off horizontal
+    if pocket[0] == MIDDLE_POCKET_X:
+        dx, dy = pocket - chosen_ball
+        # compute angle between shot line and horizontal rail
+        steepness = np.degrees(np.arctan2(abs(dy), abs(dx)))
+        if steepness < MIN_STEEP_ANGLE:
+            # too flat against the rail → can’t pot
+            return False
+        
+    # TODO: check for interfering balls in both lines (cue to ball and ball to pocket)
+
     return True
 
 def pick_pocket(chosen_ball, cue_ball):
@@ -289,7 +301,7 @@ def pick_pocket(chosen_ball, cue_ball):
     Given chosen ball and cue ball, find the best pocket to aim for 
     ideas:
     - make sure angle is > 90 degrees (must be possible shot)
-    - prioritize corner pockets
+    - prioritize corner pockets (middle pockets must have approach angle within 45 deg of perp line)
     - check to see if there are interfering balls in both lines (cue to ball and ball to pocket)
     '''
     valid_pockets = []  # store (pocket_idx, ghost_coords, total ball travel distance)
@@ -297,12 +309,11 @@ def pick_pocket(chosen_ball, cue_ball):
         pocket = constants['pocket_aim_coords'][pocket_idx]
         ghost_coords = get_ghost_ball_coords(chosen_ball, pocket)
         possible = is_shot_possible(cue_ball, chosen_ball, ghost_coords, pocket)
-        print(f"Pocket {pocket_idx}: {pocket}, Ball coords: {chosen_ball}, Ghost coords: {ghost_coords}, Possible: {possible}")
         if possible:
             travel_distance = np.linalg.norm(chosen_ball - pocket) + np.linalg.norm(cue_ball - ghost_coords)
             valid_pockets.append((pocket_idx, ghost_coords, travel_distance))
     
-    return min(valid_pockets, key=lambda x: x[2]) if valid_pockets else None
+    return min(valid_pockets, key=lambda x: x[2]) if valid_pockets else (None, None, None)
         
 
 def manually_pick_ball_to_shoot():
@@ -342,9 +353,8 @@ def manually_pick_ball_to_shoot():
                 if aim_coords is None:
                     print("No valid pocket found, skipping...")
                     continue
-                print(aim_coords)
 
-                # shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(85, 100))
+                shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(60, 80))
 
 
             elif key == 'q':
