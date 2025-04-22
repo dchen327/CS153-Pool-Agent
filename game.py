@@ -182,7 +182,7 @@ def show_image_and_click_to_choose(img, circles):
 
     ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
-    cue_ball = find_cue_ball(img, circles)
+    cue_ball = project.find_cue_ball(img, circles)
 
     for idx, (x, y, r) in enumerate(circles):
         if (x, y) == cue_ball:
@@ -217,45 +217,7 @@ def conv_coord_from_cropped_to_full(coord):
     coord = (coord[0] + constants['playable_area']['top_left'][0] + 15, coord[1] + constants['playable_area']['top_left'][1] + 15)
     return np.array(coord)
 
-def find_cue_ball(img, circles):
-    ''' Given image and circle coords, find circle with highest avg RGB (cue ball) '''
-    cue_ball = None
-    cue_ball_rgb = 0
-    radius = constants['ball_radius']
 
-    h, w = img.shape[:2]
-
-    for circle in circles:
-        x, y, _ = circle
-        x, y = int(x), int(y)
-
-        # Define bounding box limits and clamp to image bounds
-        x1 = max(0, x - radius)
-        y1 = max(0, y - radius)
-        x2 = min(w, x + radius)
-        y2 = min(h, y + radius)
-
-        crop = img[y1:y2, x1:x2]
-
-        # New radius for the mask if crop size is smaller near edges
-        crop_h, crop_w = crop.shape[:2]
-        yy, xx = np.ogrid[:crop_h, :crop_w]
-        center_y = crop_h // 2
-        center_x = crop_w // 2
-        mask = (xx - center_x) ** 2 + (yy - center_y) ** 2 <= radius ** 2
-
-        if crop.size == 0 or mask.shape != crop.shape[:2]:
-            continue
-
-        masked_pixels = crop[mask]
-        avg_rgb = np.mean(masked_pixels, axis=0)
-        brightness = np.sum(avg_rgb)
-
-        if brightness > cue_ball_rgb:
-            cue_ball_rgb = brightness
-            cue_ball = (x, y)
-
-    return cue_ball
 
 def get_ghost_ball_coords(chosen_ball, pocket):
     """ Calculate the ghost ball coordinates for aiming. """
@@ -339,7 +301,7 @@ def manually_pick_ball_to_shoot():
                                             min_dist=20, canny=100, accum=18, min_radius=23, max_radius=27)
                 circles = circles[0]
 
-                cue_ball = find_cue_ball(img, circles)
+                cue_ball = project.find_cue_ball(img, circles)
                 cue_ball = conv_coord_from_cropped_to_full(cue_ball)
                 
                 chosen_ball = show_image_and_click_to_choose(img, circles)

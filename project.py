@@ -1,7 +1,12 @@
 import cv2
 import numpy as np
+import json
 import matplotlib.pyplot as plt
 from scipy.stats import norm
+from pathlib import Path
+
+root = Path(__file__).parent
+constants = json.load(open(root / 'constants.json'))
 
 def compute_ratios(img, use_blue=False):
     """
@@ -121,3 +126,44 @@ def preprocess_file(impath, size=48, padding=0, thresh_1=(0.9,1.25), thresh_2=(0
 
 def preprocess_data(data, size=48, padding=0, thresh_1=(0.9,1.25), thresh_2=(0.65,1), close_size=3, open_size=3):
     return [preprocess_image(img, size, padding, thresh_1, thresh_2, close_size, open_size) for img in data]
+
+
+def find_cue_ball(img, circles):
+    ''' Given image and circle coords, find circle with highest avg RGB (cue ball) '''
+    cue_ball = None
+    cue_ball_rgb = 0
+    radius = constants['ball_radius']
+
+    h, w = img.shape[:2]
+
+    for circle in circles:
+        x, y, _ = circle
+        x, y = int(x), int(y)
+
+        # Define bounding box limits and clamp to image bounds
+        x1 = max(0, x - radius)
+        y1 = max(0, y - radius)
+        x2 = min(w, x + radius)
+        y2 = min(h, y + radius)
+
+        crop = img[y1:y2, x1:x2]
+
+        # New radius for the mask if crop size is smaller near edges
+        crop_h, crop_w = crop.shape[:2]
+        yy, xx = np.ogrid[:crop_h, :crop_w]
+        center_y = crop_h // 2
+        center_x = crop_w // 2
+        mask = (xx - center_x) ** 2 + (yy - center_y) ** 2 <= radius ** 2
+
+        if crop.size == 0 or mask.shape != crop.shape[:2]:
+            continue
+
+        masked_pixels = crop[mask]
+        avg_rgb = np.mean(masked_pixels, axis=0)
+        brightness = np.sum(avg_rgb)
+
+        if brightness > cue_ball_rgb:
+            cue_ball_rgb = brightness
+            cue_ball = (x, y)
+
+    return cue_ball
