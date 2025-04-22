@@ -167,3 +167,70 @@ def find_cue_ball(img, circles):
             cue_ball = (x, y)
 
     return cue_ball
+
+def conv_coord_from_cropped_to_full(coord):
+    ''' Convert coordinates from cropped image to full image '''
+    # add 15 px to x and y coords
+    coord = (coord[0] + constants['playable_area']['top_left'][0] + 15, coord[1] + constants['playable_area']['top_left'][1] + 15)
+    return np.array(coord)
+
+
+
+def get_ghost_ball_coords(chosen_ball, pocket):
+    """ Calculate the ghost ball coordinates for aiming. """
+    chosen_ball, pocket = np.array(chosen_ball), np.array(pocket)
+    pocket_to_ball = chosen_ball - pocket
+    pocket_to_ball = pocket_to_ball / np.linalg.norm(pocket_to_ball) * 2 * constants['ball_radius']
+    ghost_coords = chosen_ball + pocket_to_ball
+    return np.array(ghost_coords, dtype=int)
+
+
+def is_shot_possible(cue_ball, chosen_ball, ghost_coords, pocket):
+    ''' 
+    Given cue ball, chosen ball, and pocket, check if the shot is possible
+    - check angle between cue ball, chosen ball, and pocket
+    - check for interfering balls in both lines (cue to ball and ball to pocket)
+    '''
+    # calculate angle between cue ball, chosen ball, and pocket, ensure >= 100 deg
+    cue_ball, chosen_ball, pocket = np.array(cue_ball), np.array(chosen_ball), np.array(pocket)
+    ball_to_cue = cue_ball - ghost_coords
+    ball_to_pocket = pocket - chosen_ball
+    angle = np.arccos(np.dot(ball_to_cue, ball_to_pocket) / (np.linalg.norm(ball_to_cue) * np.linalg.norm(ball_to_pocket)))
+    angle = np.degrees(angle)
+    if angle < 100:
+        return False
+
+    # for middle pocket, check if the angle is too flat
+    MIDDLE_POCKET_X = 1228
+    MIN_STEEP_ANGLE = 30  # degrees off horizontal
+    if pocket[0] == MIDDLE_POCKET_X:
+        dx, dy = pocket - chosen_ball
+        # compute angle between shot line and horizontal rail
+        steepness = np.degrees(np.arctan2(abs(dy), abs(dx)))
+        if steepness < MIN_STEEP_ANGLE:
+            # too flat against the rail → can’t pot
+            return False
+        
+    # TODO: check for interfering balls in both lines (cue to ball and ball to pocket)
+
+    return True
+
+
+def pick_pocket(chosen_ball, cue_ball):
+    ''' 
+    Given chosen ball and cue ball, find the best pocket to aim for 
+    ideas:
+    - make sure angle is > 90 degrees (must be possible shot)
+    - prioritize corner pockets (middle pockets must have approach angle within 45 deg of perp line)
+    - check to see if there are interfering balls in both lines (cue to ball and ball to pocket)
+    '''
+    valid_pockets = []  # store (pocket_idx, ghost_coords, total ball travel distance)
+    for pocket_idx in range(6):
+        pocket = constants['pocket_aim_coords'][pocket_idx]
+        ghost_coords = get_ghost_ball_coords(chosen_ball, pocket)
+        possible = is_shot_possible(cue_ball, chosen_ball, ghost_coords, pocket)
+        if possible:
+            travel_distance = np.linalg.norm(chosen_ball - pocket) + np.linalg.norm(cue_ball - ghost_coords)
+            valid_pockets.append((pocket_idx, ghost_coords, travel_distance))
+    
+    return min(valid_pockets, key=lambda x: x[2]) if valid_pockets else (None, None, None)
