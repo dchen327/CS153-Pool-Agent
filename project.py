@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import json
+import torch
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from pathlib import Path
@@ -140,7 +141,7 @@ def find_cue_ball(img, circles):
         x, y, _ = circle
         x, y = int(x), int(y)
 
-        # Define bounding box limits and clamp to image bounds
+        # clamp to image bounds
         x1 = max(0, x - radius)
         y1 = max(0, y - radius)
         x2 = min(w, x + radius)
@@ -148,7 +149,7 @@ def find_cue_ball(img, circles):
 
         crop = img[y1:y2, x1:x2]
 
-        # New radius for the mask if crop size is smaller near edges
+        # make sure don't crop near edges
         crop_h, crop_w = crop.shape[:2]
         yy, xx = np.ogrid[:crop_h, :crop_w]
         center_y = crop_h // 2
@@ -167,6 +168,45 @@ def find_cue_ball(img, circles):
             cue_ball = (x, y)
 
     return cue_ball
+
+def find_8_ball(img, circles):
+    ''' Given image and circle coords, find circle with most pixels rgb < (25, 25, 25) '''
+    eight_ball = None
+    max_dark_pixels = 0
+    radius = constants['ball_radius']
+    
+    h, w = img.shape[:2]
+
+    for circle in circles:
+        x, y, _ = circle
+        x, y = int(x), int(y)
+
+        x1 = max(0, x - radius)
+        y1 = max(0, y - radius)
+        x2 = min(w, x + radius)
+        y2 = min(h, y + radius)
+
+        crop = img[y1:y2, x1:x2]
+
+        crop_h, crop_w = crop.shape[:2]
+        yy, xx = np.ogrid[:crop_h, :crop_w]
+        center_y = crop_h // 2
+        center_x = crop_w // 2
+        mask = (xx - center_x) ** 2 + (yy - center_y) ** 2 <= radius ** 2
+
+        if crop.size == 0 or mask.shape != crop.shape[:2]:
+            continue
+
+        masked_pixels = crop[mask]
+
+        dark_pixels = np.sum(np.all(masked_pixels < 25, axis=1))
+
+        if dark_pixels > max_dark_pixels:
+            max_dark_pixels = dark_pixels
+            eight_ball = (x, y)
+
+    return eight_ball
+
 
 def conv_coord_from_cropped_to_full(coord):
     ''' Convert coordinates from cropped image to full image '''
@@ -234,3 +274,44 @@ def pick_pocket(chosen_ball, cue_ball):
             valid_pockets.append((pocket_idx, ghost_coords, travel_distance))
     
     return min(valid_pockets, key=lambda x: x[2]) if valid_pockets else (None, None, None)
+
+def label_balls(img, circles, data):
+    ''' 
+    Given img, circle coords, and cropped ball data, return dict with
+    {
+        'cue_ball': (x, y),
+        '8_ball': (x, y),
+        'aim_circle': (x, y),
+        'stripes': [(x, y), (x, y), ...],
+        'solids': [(x, y), (x, y), ...]
+    }
+    '''
+    # load torch model 'ball_type.pth'
+    model = torch.jit.load(root / 'ball_type.pth')
+
+    cue_ball = find_cue_ball(img, circles)
+    eight_ball = find_8_ball(img, circles)
+    cue_ball = conv_coord_from_cropped_to_full(cue_ball)
+    eight_ball = conv_coord_from_cropped_to_full(eight_ball)
+
+    for i in range(len(circles)):
+        if cue_ball is not None and np.array_equal(circles[i][:2], cue_ball):
+            continue
+        if eight_ball is not None and np.array_equal(circles[i][:2], eight_ball):
+            continue
+
+        ball = preprocess_image(data[i], size=56, padding=0,
+                                     thresh_1=(0.5, 1.1), thresh_2=(0.9, 1.1),
+                                     close_size=2, open_size=2)
+        model.eval()
+        with torch.no_grad():
+            ball = torch.from_numpy(ball).unsqueeze(0).unsqueeze(0)
+            ball = ball.to('cpu')
+            pred = model(ball)
+            pred = torch.argmax(pred, dim=1).item()
+            print(i, circles[i], pred)
+        
+
+
+
+
