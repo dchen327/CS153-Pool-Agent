@@ -5,6 +5,7 @@ import torch
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from pathlib import Path
+from models import BallCNN
 
 root = Path(__file__).parent
 constants = json.load(open(root / 'constants.json'))
@@ -84,6 +85,7 @@ def generate_data(img, use_blue=False, k_1 = 1.2, k_2 = 1.5, min_dist=40, canny=
     mask = create_foreground_mask(img, rg, bg, rg_thresh, bg_thresh)
 
     circles = find_circles(mask, min_dist, canny, accum, min_radius, max_radius)
+    new_circles = []
 
     data = []
     circles = np.around(circles).astype(np.uint16)
@@ -93,7 +95,9 @@ def generate_data(img, use_blue=False, k_1 = 1.2, k_2 = 1.5, min_dist=40, canny=
             if r <= x <= w-1-r and r <= y <= h-1-r:
                 cropped = img[y-r:y+r, x-r:x+r].copy()
                 data.append(cropped)
-    return circles, data
+                new_circles.append((x, y, r))
+    
+    return new_circles, data
 
 def preprocess_image(img, size=48, padding=0, thresh_1=(0.9,1.25), thresh_2=(0.65,1), close_size=3, open_size=3):
     """
@@ -286,13 +290,21 @@ def label_balls(img, circles, data):
         'solids': [(x, y), (x, y), ...]
     }
     '''
-    # load torch model 'ball_type.pth'
-    model = torch.jit.load(root / 'ball_type.pth')
+    model = BallCNN()
+    model.load_state_dict(torch.load('ball_type.pth'))
 
     cue_ball = find_cue_ball(img, circles)
     eight_ball = find_8_ball(img, circles)
-    cue_ball = conv_coord_from_cropped_to_full(cue_ball)
-    eight_ball = conv_coord_from_cropped_to_full(eight_ball)
+    # cue_ball = conv_coord_from_cropped_to_full(cue_ball)
+    # eight_ball = conv_coord_from_cropped_to_full(eight_ball)
+
+    res = {
+        'cue_ball': cue_ball,
+        '8_ball': eight_ball,
+        'aim_circle': [],
+        'stripes': [],
+        'solids': []
+    }
 
     for i in range(len(circles)):
         if cue_ball is not None and np.array_equal(circles[i][:2], cue_ball):
@@ -305,11 +317,19 @@ def label_balls(img, circles, data):
                                      close_size=2, open_size=2)
         model.eval()
         with torch.no_grad():
-            ball = torch.from_numpy(ball).unsqueeze(0).unsqueeze(0)
+            ball = torch.from_numpy(ball).unsqueeze(0).unsqueeze(0) / 255  # normalize like toTensor
             ball = ball.to('cpu')
             pred = model(ball)
             pred = torch.argmax(pred, dim=1).item()
-            print(i, circles[i], pred)
+            if pred == 0:
+                res['stripes'].append(circles[i][:2])
+            elif pred == 1:
+                res['solids'].append(circles[i][:2])
+            elif pred == 2:
+                res['aim_circle'].append(circles[i][:2])
+        
+    return res
+    
         
 
 
