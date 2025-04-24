@@ -103,7 +103,7 @@ def preprocess_image(img, size=48, padding=0, thresh_1=(0.9,1.25), thresh_2=(0.6
     """
     Preprocess provided image into black-and-white data ready for neural network
     """
-    
+
     img = cv2.resize(img, (size-2*padding, size-2*padding))
     img = cv2.copyMakeBorder(img, padding, padding, padding, padding, cv2.BORDER_REPLICATE)
 
@@ -122,7 +122,7 @@ def preprocess_image(img, size=48, padding=0, thresh_1=(0.9,1.25), thresh_2=(0.6
     cx, cy = (size-1)/2, (size-1)/2
     circle_mask = (x - cx)**2 + (y - cy)**2 <= r**2
 
-    return (~circle_mask * 128 + circle_mask * mask_ball).astype(np.uint8)
+    return (circle_mask * mask_ball).astype(np.uint8)
 
 def preprocess_file(impath, size=48, padding=0, thresh_1=(0.9,1.25), thresh_2=(0.65,1), close_size=3, open_size=3):
     img = cv2.imread(impath)
