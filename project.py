@@ -228,8 +228,26 @@ def get_ghost_ball_coords(chosen_ball, pocket):
     ghost_coords = chosen_ball + pocket_to_ball
     return np.array(ghost_coords, dtype=int)
 
+def dist_to_segment(pt, a, b):
+    """Euclidean distance from point to line segment ab."""
+    seg = b - a
+    seg_len2 = seg.dot(seg)
+    if seg_len2 == 0:
+        return np.linalg.norm(pt - a)
+    # project t in [0, 1]
+    t = max(0, min(1, (pt - a).dot(seg) / seg_len2))
+    proj = a + t * seg
+    return np.linalg.norm(pt - proj)
 
-def is_shot_possible(cue_ball, chosen_ball, ghost_coords, pocket):
+def is_pt_between(pt, a, b):
+    """Check if a point is between the start and end points of a line segment"""
+    dot1 = np.dot(pt - a, b - a)
+    dot2 = np.dot(pt - b, a - b)
+    
+    # if both dot products are positive, the point is between a and b
+    return dot1 >= 0 and dot2 >= 0
+
+def is_shot_possible(cue_ball, chosen_ball, all_balls, ghost_coords, pocket):
     ''' 
     Given cue ball, chosen ball, and pocket, check if the shot is possible
     - check angle between cue ball, chosen ball, and pocket
@@ -256,6 +274,21 @@ def is_shot_possible(cue_ball, chosen_ball, ghost_coords, pocket):
             return False
         
     # TODO: check for interfering balls in both lines (cue to ball and ball to pocket)
+    radius = constants['ball_radius']
+    threshold = 2 * radius + 2
+
+     # check every other ball besides cue ball and chosen ball
+    for ball in all_balls:
+        ball = np.array(ball)
+        # skip the cue and chosen themselves
+        if np.array_equal(ball, cue_ball) or np.array_equal(ball, chosen_ball):
+            continue
+
+        # if either path is blocked and ball is between the two points, return False
+        if dist_to_segment(ball, cue_ball, ghost_coords) < threshold and is_pt_between(ball, cue_ball, ghost_coords):
+            return False
+        if dist_to_segment(ball, chosen_ball, pocket) < threshold and is_pt_between(ball, ghost_coords, pocket):
+            return False
 
     return True
 
@@ -279,6 +312,24 @@ def pick_pocket(chosen_ball, cue_ball):
     
     return min(valid_pockets, key=lambda x: x[2]) if valid_pockets else (None, None, None)
 
+def pick_best_ball_pocket_pair(available_balls, labels):
+    all_balls = labels['stripes'] + labels['solids'] + [labels['8_ball']]
+
+    
+
+    valid_pairs = []
+    for target_ball in available_balls:
+        target_ball = np.array(target_ball)
+        for pocket_idx in range(6):
+            pocket = constants['pocket_aim_coords'][pocket_idx]
+            ghost_coords = get_ghost_ball_coords(target_ball, pocket)
+            possible = is_shot_possible(labels['cue_ball'], target_ball, all_balls, ghost_coords, pocket)
+            if possible:
+                travel_distance = np.linalg.norm(target_ball - pocket) + np.linalg.norm(labels['cue_ball'] - ghost_coords)
+                valid_pairs.append((target_ball, pocket_idx, ghost_coords, travel_distance))
+
+    return min(valid_pairs, key=lambda x: x[3]) if valid_pairs else (None, None, None, None)
+
 def label_balls(img, circles, data):
     ''' 
     Given img, circle coords, and cropped ball data, return dict with
@@ -289,12 +340,17 @@ def label_balls(img, circles, data):
         'stripes': [(x, y), (x, y), ...],
         'solids': [(x, y), (x, y), ...]
     }
+    with coords in full coordinates (not cropped)
     '''
     model = BallCNN()
     model.load_state_dict(torch.load(root / 'ball_type.pth', map_location=torch.device('cpu')))
 
     cue_ball = find_cue_ball(img, circles)
+    if cue_ball is not None:
+        cue_ball = conv_coord_from_cropped_to_full(cue_ball)
     eight_ball = find_8_ball(img, circles)
+    if eight_ball is not None:
+        eight_ball = conv_coord_from_cropped_to_full(eight_ball)
 
     res = {
         'cue_ball': cue_ball,
@@ -320,11 +376,11 @@ def label_balls(img, circles, data):
             pred = model(ball)
             pred = torch.argmax(pred, dim=1).item()
             if pred == 0:
-                res['stripes'].append(circles[i][:2])
+                res['stripes'].append(conv_coord_from_cropped_to_full(circles[i][:2]))
             elif pred == 1:
-                res['solids'].append(circles[i][:2])
+                res['solids'].append(conv_coord_from_cropped_to_full(circles[i][:2]))
             elif pred == 2:
-                res['aim_circle'] = tuple(circles[i][:2])
+                res['aim_circle'] = conv_coord_from_cropped_to_full(circles[i][:2])
         
     return res
     

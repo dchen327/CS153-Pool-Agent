@@ -258,8 +258,8 @@ def manually_pick_ball_to_shoot():
                 break
 
 def semi_manual():
-    ''' Type 1 or 2 for stripe/solid, or 3 for any ball. Picks a ball and pocket to shoot into '''
-    print("Press 1 for stripe, 2 for solid, or 3 for any ball. Press 'q' to quit.")
+    ''' Type 1 for stripe, 2 for solid, 3 for 8 ball, 4 for any ball. Picks a ball and pocket to shoot into '''
+    print("Press 1 for stripe, 2 for solid, 3 for 8 ball, 4 for any ball. Press 'q' to quit.")
 
     with mss.mss() as sct:
         # set monitor to be the one with the 8Ball window
@@ -267,7 +267,7 @@ def semi_manual():
 
         while True:
             key = keyboard.read_key()
-            if key in ['1', '2', '3']:
+            if key in ['1', '2', '3', '4']:
                 sct_img = sct.grab(monitor)
                 img = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2BGR)
                 img = img[constants['playable_area']['top_left'][1]:constants['playable_area']['bottom_right'][1],
@@ -290,24 +290,34 @@ def semi_manual():
                 elif key == '2' and len(labels['solids']) == 0:
                     print("No solid balls found, skipping...")
                     continue
+                elif key == '3' and labels['8_ball'] is None:
+                    print("No 8 ball found, skipping...")
+                    continue
+                elif key == '4' and len(labels['stripes']) == 0 and len(labels['solids']) == 0:
+                    print("No balls found, skipping...")
+                    continue
 
                 # TODO: pick a good ball based on threshold
+                available_balls = []
                 if key == '1':
-                    chosen_ball = random.choice(labels['stripes'])
+                    available_balls = labels['stripes']
                 elif key == '2':
-                    chosen_ball = random.choice(labels['solids'])
-                else:
-                    chosen_ball = random.choice(labels['solids'] + labels['stripes'])
+                    available_balls = labels['solids']
+                elif key == '3':
+                    available_balls = [labels['8_ball']]
+                elif key == '4':
+                    available_balls = labels['stripes'] + labels['solids']
 
-                chosen_ball = project.conv_coord_from_cropped_to_full(chosen_ball)
-                # shoot the ball
-                cue_ball = project.conv_coord_from_cropped_to_full(labels['cue_ball'])
-                _, aim_coords, _ = project.pick_pocket(chosen_ball, cue_ball)
+                _, _, aim_coords, _ = project.pick_best_ball_pocket_pair(available_balls, labels)
+
                 if aim_coords is None:
                     print("No valid pocket found, skipping...")
                     continue
 
-                shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(40, 70))
+                pag.moveTo(aim_coords[0], aim_coords[1])
+                sleep(2)
+
+                shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(40, 60))
             elif key == 'q':
                 print('Quitting...')
                 break
