@@ -86,6 +86,7 @@ def shoot_ball(coords, power=100):
     pag.moveTo(coords[0], coords[1])
     pag.click()
     sleep(0.5)  # Wait for the aim to settle
+
     # drag power stick down to shoot
     pag.moveTo(POWER_STICK_TOP[0], POWER_STICK_TOP[1])
     pag.mouseDown()
@@ -256,9 +257,71 @@ def manually_pick_ball_to_shoot():
                 print('Quitting...')
                 break
 
+def semi_manual():
+    ''' Type 1 or 2 for stripe/solid, or 3 for any ball. Picks a ball and pocket to shoot into '''
+    print("Press 1 for stripe, 2 for solid, or 3 for any ball. Press 'q' to quit.")
+
+    with mss.mss() as sct:
+        # set monitor to be the one with the 8Ball window
+        monitor = sct.monitors[1]  # Primary monitor
+
+        while True:
+            key = keyboard.read_key()
+            if key in ['1', '2', '3']:
+                sct_img = sct.grab(monitor)
+                img = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2BGR)
+                img = img[constants['playable_area']['top_left'][1]:constants['playable_area']['bottom_right'][1],
+                        constants['playable_area']['top_left'][0]:constants['playable_area']['bottom_right'][0]]
+                # crop image by another 5px on each side
+                img = img[15:-15, 15:-15]
+                # show image
+                circles, data = project.generate_data(img, use_blue=False, k_1=2.5, k_2=1.5,
+                                            min_dist=20, canny=100, accum=18, min_radius=23, max_radius=27)
+                circles = circles[0]
+
+                labels = project.label_balls(img, circles, data)
+                if labels['cue_ball'] is None:
+                    print("No cue ball found, skipping...")
+                    continue
+            
+                if key == '1' and len(labels['stripes']) == 0:
+                    print("No stripe balls found, skipping...")
+                    continue
+                elif key == '2' and len(labels['solids']) == 0:
+                    print("No solid balls found, skipping...")
+                    continue
+
+                # TODO: pick a good ball based on threshold
+                if key == '1':
+                    chosen_ball = random.choice(labels['stripes'])
+                elif key == '2':
+                    chosen_ball = random.choice(labels['solids'])
+                else:
+                    chosen_ball = random.choice(labels['solids'] + labels['stripes'])
+
+                chosen_ball = project.conv_coord_from_cropped_to_full(chosen_ball)
+                # shoot the ball
+                cue_ball = project.conv_coord_from_cropped_to_full(labels['cue_ball'])
+                _, aim_coords, _ = project.pick_pocket(chosen_ball, cue_ball)
+                if aim_coords is None:
+                    print("No valid pocket found, skipping...")
+                    continue
+
+                shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(40, 70))
+            elif key == 'q':
+                print('Quitting...')
+                break
+            else:
+                print("Invalid key, please press 1, 2, or 3.")
+                continue
+            sleep(0.5)
+
+
+
 
 if __name__ == "__main__":
     setup() 
     # collect_data()
     # take_screenshots_from_break()
-    manually_pick_ball_to_shoot()
+    # manually_pick_ball_to_shoot()
+    semi_manual()

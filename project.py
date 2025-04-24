@@ -291,12 +291,10 @@ def label_balls(img, circles, data):
     }
     '''
     model = BallCNN()
-    model.load_state_dict(torch.load('ball_type.pth'))
+    model.load_state_dict(torch.load(root / 'ball_type.pth', map_location=torch.device('cpu')))
 
     cue_ball = find_cue_ball(img, circles)
     eight_ball = find_8_ball(img, circles)
-    # cue_ball = conv_coord_from_cropped_to_full(cue_ball)
-    # eight_ball = conv_coord_from_cropped_to_full(eight_ball)
 
     res = {
         'cue_ball': cue_ball,
