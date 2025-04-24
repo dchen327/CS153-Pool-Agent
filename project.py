@@ -218,6 +218,11 @@ def conv_coord_from_cropped_to_full(coord):
     coord = (coord[0] + constants['playable_area']['top_left'][0] + 15, coord[1] + constants['playable_area']['top_left'][1] + 15)
     return np.array(coord)
 
+def conv_coord_from_full_to_cropped(coord):
+    ''' Convert coordinates from full image to cropped image '''
+    # subtract 15 px from x and y coords
+    coord = (coord[0] - constants['playable_area']['top_left'][0] - 15, coord[1] - constants['playable_area']['top_left'][1] - 15)
+    return np.array(coord)
 
 
 def get_ghost_ball_coords(chosen_ball, pocket):
