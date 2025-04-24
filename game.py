@@ -314,9 +314,6 @@ def semi_manual():
                     print("No valid pocket found, skipping...")
                     continue
 
-                pag.moveTo(aim_coords[0], aim_coords[1])
-                sleep(2)
-
                 shoot_ball((aim_coords[0], aim_coords[1]), power=random.randint(40, 60))
             elif key == 'q':
                 print('Quitting...')
