@@ -97,7 +97,7 @@ def generate_data(img, use_blue=False, k_1 = 1.2, k_2 = 1.5, min_dist=40, canny=
                 data.append(cropped)
                 new_circles.append((x, y, r))
     
-    return new_circles, data
+    return [new_circles], data
 
 def preprocess_image(img, size=48, padding=0, thresh_1=(0.9,1.25), thresh_2=(0.65,1), close_size=3, open_size=3):
     """
@@ -301,7 +301,7 @@ def label_balls(img, circles, data):
     res = {
         'cue_ball': cue_ball,
         '8_ball': eight_ball,
-        'aim_circle': [],
+        'aim_circle': None,
         'stripes': [],
         'solids': []
     }
@@ -326,7 +326,7 @@ def label_balls(img, circles, data):
             elif pred == 1:
                 res['solids'].append(circles[i][:2])
             elif pred == 2:
-                res['aim_circle'].append(circles[i][:2])
+                res['aim_circle'] = tuple(circles[i][:2])
         
     return res
     
