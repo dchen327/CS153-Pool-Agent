@@ -203,7 +203,7 @@ def find_8_ball(img, circles):
 
         masked_pixels = crop[mask]
 
-        dark_pixels = np.sum(np.all(masked_pixels < 25, axis=1))
+        dark_pixels = np.sum(np.all(masked_pixels < 30, axis=1))
 
         if dark_pixels > max_dark_pixels:
             max_dark_pixels = dark_pixels
@@ -264,12 +264,12 @@ def is_shot_possible(cue_ball, chosen_ball, all_balls, ghost_coords, pocket):
     ball_to_pocket = pocket - chosen_ball
     angle = np.arccos(np.dot(ball_to_cue, ball_to_pocket) / (np.linalg.norm(ball_to_cue) * np.linalg.norm(ball_to_pocket)))
     angle = np.degrees(angle)
-    if angle < 100:
+    if angle < 110:
         return False
 
     # for middle pocket, check if the angle is too flat
     MIDDLE_POCKET_X = 1228
-    MIN_STEEP_ANGLE = 30  # degrees off horizontal
+    MIN_STEEP_ANGLE = 45  # degrees off horizontal
     if pocket[0] == MIDDLE_POCKET_X:
         dx, dy = pocket - chosen_ball
         # compute angle between shot line and horizontal rail
@@ -278,7 +278,7 @@ def is_shot_possible(cue_ball, chosen_ball, all_balls, ghost_coords, pocket):
             # too flat against the rail → can’t pot
             return False
         
-    # TODO: check for interfering balls in both lines (cue to ball and ball to pocket)
+    # check for interfering balls in both lines (cue to ball and ball to pocket)
     radius = constants['ball_radius']
     threshold = 2 * radius + 2
 
